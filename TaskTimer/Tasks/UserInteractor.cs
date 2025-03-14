@@ -50,7 +50,7 @@ public class UserInteractor
     /// </summary>
     public void Register()
     {
-        string userName = PromptForInput<string>("Enter the username: ", "Username cannot be empty!");
+        string userName = PromptForInput("Enter the username: ", "Username cannot be empty!");
 
         if (_userManager.IsUserPresent(userName))
         {
@@ -81,155 +81,144 @@ public class UserInteractor
     /// <see cref="UserManager.IsLoginValid(string, string)"/> to Log the user in.
     /// </summary>
     public void Login()
-{
-    string userName = PromptForInput<string>("Enter the username: ", "Username cannot be empty!");
-    if (_userManager.IsUserPresent(userName))
     {
-        string userPassword = GetUserPassword();
-        if (_userManager.IsLoginValid(userName, userPassword))
+        string userName = PromptForInput("Enter the username: ", "Username cannot be empty!");
+        if (_userManager.IsUserPresent(userName))
         {
-            _loggedInUser = _userManager.GetUser(userName); // Store the User object
-            _logger.DisplaySuccess($"Logged in as {_loggedInUser.UserName}!");
-            ShowDashboard();
+            string userPassword = GetUserPassword();
+            if (_userManager.IsLoginValid(userName, userPassword))
+            {
+                _loggedInUser = _userManager.GetUser(userName); // Store the User object
+                _logger.DisplaySuccess($"Logged in as {_loggedInUser.UserName}!");
+                ShowDashboard();
+            }
+            else
+            {
+                _logger.DisplayFailure("\nWrong password! Try again.");
+            }
         }
         else
         {
-            _logger.DisplayFailure("\nWrong password! Try again.");
+            _logger.DisplayFailure($"No user with name {userName}.");
         }
     }
-    else
-    {
-        _logger.DisplayFailure($"No user with name {userName}.");
-    }
-}
 
     /// <summary>
     /// Displays the dashboard where users can create projects, tasks, subtasks, and start timers.
     /// </summary>
-    private void ShowDashboard()
-{
-    if (_loggedInUser == null)
+    public void ShowDashboard()
     {
-        _logger.DisplayFailure("No user logged in!");
-        return;
-    }
-
-    List<string> options = new()
-    {
-        "Create Project",
-        "Create Task",
-        "Create Subtask",
-        "Start Timer on Subtask",
-        "Logout"
-    };
-
-    while (true)
-    {
-        string choice = CreateDropDown(options, $"Dashboard - {_loggedInUser.UserName}", "[Up/Down] to navigate, [Enter] to select");
-
-        switch (choice)
+        if (_loggedInUser == null)
         {
-            case "Create Project":
+            _logger.DisplayFailure("No user logged in!");
+            return;
+        }
+
+        while (true)
+        {
+            List<string> options = new() { "Create Project" };
+            options.AddRange(_fileHandler.GetProjectFolders(_loggedInUser.UserName));
+
+            string choice = CreateDropDown(options, $"Projects - {_loggedInUser.UserName}", "[Up/Down] to navigate, [Enter] to select, [Esc] to exit");
+
+            if (choice == null) return; // Exit on ESC
+            if (choice == "Create Project")
+            {
                 CreateProject(_loggedInUser.UserName);
-                break;
-            case "Create Task":
-                CreateTask(_loggedInUser.UserName);
-                break;
-            case "Create Subtask":
-                CreateSubtask(_loggedInUser.UserName);
-                break;
-            case "Start Timer on Subtask":
-                StartTimerOnSubtask(_loggedInUser.UserName);
-                break;
-            case "Logout":
-                Console.WriteLine("Logging out...");
-                _loggedInUser = null;
-                return;
+            }
+            else
+            {
+                ShowTaskMenu(_loggedInUser.UserName, choice);
+            }
         }
     }
-}
+
+    private void ShowTaskMenu(string username, string project)
+    {
+        while (true)
+        {
+            List<string> options = new() { "Create Task" };
+            options.AddRange(_fileHandler.GetTaskFolders(username, project));
+
+            string choice = CreateDropDown(options, $"Tasks in {project}", "[Up/Down] to navigate, [Enter] to select, [Esc] to go back");
+
+            if (choice == null) return; // Back on ESC
+            if (choice == "Create Task")
+            {
+                CreateTask(username, project);
+            }
+            else
+            {
+                ShowSubtaskMenu(username, project, choice);
+            }
+        }
+    }
+
+    private void ShowSubtaskMenu(string username, string project, string task)
+    {
+        while (true)
+        {
+            List<string> options = new() { "Create Subtask" };
+            options.AddRange(_fileHandler.GetSubTaskFolders(username, project, task));
+
+            string choice = CreateDropDown(options, $"Subtasks in {task}", "[Up/Down] to navigate, [Enter] to select, [Esc] to go back");
+
+            if (choice == null) return; // Back on ESC
+            if (choice == "Create Subtask")
+            {
+                CreateSubtask(username, project, task);
+            }
+            else
+            {
+                ShowTimerMenu(username, project, task, choice);
+            }
+        }
+    }
+
+    private void ShowTimerMenu(string username, string project, string task, string subtask)
+    {
+        while (true)
+        {
+            List<string> options = new() { "Start Timer", "Stop Timer" };
+
+            string choice = CreateDropDown(options, $"Timer for {subtask}", "[Up/Down] to navigate, [Enter] to select, [Esc] to go back");
+
+            if (choice == null) return; // Back on ESC
+            if (choice == "Start Timer")
+            {
+                string workDescription = PromptForInput("Enter work description: ", "Work description cannot be empty!");
+                bool isBillable = CreateDropDown(new List<string> { "Yes", "No" }, "Is this work billable?", "[Up/Down] to navigate, [Enter] to select") == "Yes";
+                _timeTrackingManager.StartTimer(username, project, task, subtask, workDescription, isBillable);
+                _logger.DisplaySuccess("Timer started for subtask!");
+            }
+            else if (choice == "Stop Timer")
+            {
+                _timeTrackingManager.StopTimer();
+                _logger.DisplaySuccess("Timer stopped!");
+            }
+        }
+    }
 
     private void CreateProject(string username)
     {
-        string projectName = PromptForInput<string>("Enter project name: ", "Project name cannot be empty!");
+        string projectName = PromptForInput("Enter project name: ", "Project name cannot be empty!");
         _fileHandler.CreateProjectFolder(username, projectName);
-        _logger.DisplaySuccess($"Project '{projectName}' created successfully!");
+        _logger.DisplaySuccess($"Project '{projectName}' created!");
     }
 
-    private void CreateTask(string username)
+    private void CreateTask(string username, string project)
     {
-        string project = SelectProject(username);
-        if (project == null) return;
-
-        string taskName = PromptForInput<string>("Enter task name: ", "Task name cannot be empty!");
+        string taskName = PromptForInput("Enter task name: ", "Task name cannot be empty!");
         _fileHandler.CreateTaskFolder(username, project, taskName);
-        _logger.DisplaySuccess($"Task '{taskName}' created in project '{project}'!");
+        _logger.DisplaySuccess($"Task '{taskName}' created in '{project}'!");
     }
 
-    private void CreateSubtask(string username)
+    private void CreateSubtask(string username, string project, string task)
     {
-        string project = SelectProject(username);
-        if (project == null) return;
-
-        string task = SelectTask(username, project);
-        if (task == null) return;
-
-        string subtaskName = PromptForInput<string>("Enter subtask name: ", "Subtask name cannot be empty!");
+        string subtaskName = PromptForInput("Enter subtask name: ", "Subtask name cannot be empty!");
         _fileHandler.CreateSubTaskFolder(username, project, task, subtaskName);
-        _logger.DisplaySuccess($"Subtask '{subtaskName}' created in task '{task}'!");
+        _logger.DisplaySuccess($"Subtask '{subtaskName}' created in '{task}'!");
     }
-
-    private void StartTimerOnSubtask(string username)
-    {
-        string project = SelectProject(username);
-        if (project == null) return;
-
-        string task = SelectTask(username, project);
-        if (task == null) return;
-
-        string subtask = SelectSubtask(username, project, task);
-        if (subtask == null) return;
-
-        string workDescription = PromptForInput<string>("Enter work description: ", "Work description cannot be empty!");
-        bool isBillable = CreateDropDown(new List<string> { "Yes", "No" }, "Is this work billable?", "[Up/Down] to navigate, [Enter] to select") == "Yes";
-
-        _timeTrackingManager.StartTimer(username, project, task, subtask, workDescription, isBillable);
-        _logger.DisplaySuccess("Timer started for subtask!");
-    }
-
-    private string SelectProject(string username)
-    {
-        List<string> projects = _fileHandler.GetProjectFolders(username);
-        if (projects.Count == 0)
-        {
-            _logger.DisplayFailure("No projects found! Create a project first.");
-            return null;
-        }
-        return CreateDropDown(projects, "Select a project:", "[Up/Down] to navigate, [Enter] to select");
-    }
-
-    private string SelectTask(string username, string project)
-    {
-        List<string> tasks = _fileHandler.GetTaskFolders(username, project);
-        if (tasks.Count == 0)
-        {
-            _logger.DisplayFailure("No tasks found! Create a task first.");
-            return null;
-        }
-        return CreateDropDown(tasks, "Select a task:", "[Up/Down] to navigate, [Enter] to select");
-    }
-
-    private string SelectSubtask(string username, string project, string task)
-    {
-        List<string> subtasks = _fileHandler.GetSubTaskFolders(username, project, task);
-        if (subtasks.Count == 0)
-        {
-            _logger.DisplayFailure("No subtasks found! Create a subtask first.");
-            return null;
-        }
-        return CreateDropDown(subtasks, "Select a subtask:", "[Up/Down] to navigate, [Enter] to select");
-    }
-
 
     private T? CreateDropDown<T>(IList<T> items, string message, string menuOptions)
     {
@@ -295,9 +284,11 @@ public class UserInteractor
         _logger.DisplayTitle(menuOptions);
     }
 
-    private T? PromptForInput<T>(string prompt, string invalidMessage, string? warningMessage = null, T? defaultValue = default)
+    private string PromptForInput(string prompt, string invalidMessage, string warningMessage = "The string size must be within 20!", int maxLength = 20)
 {
     int inputRow = Console.CursorTop; // Store the input line position
+
+    _timeTrackingManager.PauseTimerDisplay(true); // Pause timer while taking input
 
     while (true)
     {
@@ -315,26 +306,19 @@ public class UserInteractor
             continue;
         }
 
-        if (typeof(T) == typeof(string)) return (T)(object)input;
-        if (typeof(T) == typeof(int) && int.TryParse(input, out int intValue)) return (T)(object)intValue;
-        if (typeof(T) == typeof(double) && double.TryParse(input, out double doubleValue)) return (T)(object)doubleValue;
-        if (typeof(T) == typeof(decimal) && decimal.TryParse(input, out decimal decimalValue)) return (T)(object)decimalValue;
-
-        if (typeof(T) == typeof(DateOnly) && DateOnly.TryParseExact(input, "dd-MM-yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly dateValue))
+        if (input.Length > maxLength)
         {
-            if (warningMessage != null && dateValue < DateOnly.FromDateTime(DateTime.Now))
-            {
-                Console.SetCursorPosition(0, inputRow + 1);
-                _logger.DisplayFailure(warningMessage);
-                continue;
-            }
-            return (T)(object)dateValue;
+            Console.SetCursorPosition(0, inputRow + 1);
+            _logger.DisplayFailure(warningMessage);
+            continue;
         }
 
-        Console.SetCursorPosition(0, inputRow + 1);
-        _logger.DisplayFailure(invalidMessage);
+        _timeTrackingManager.PauseTimerDisplay(false); // Resume timer after valid input
+
+        return input;
     }
 }
+
 
 
 
