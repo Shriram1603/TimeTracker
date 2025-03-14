@@ -116,8 +116,11 @@ public class UserInteractor
 
         while (true)
         {
+            List<string> projectPaths = _fileHandler.GetProjectFolders(_loggedInUser.UserName);
+            Dictionary<string, string> projectMap = projectPaths.ToDictionary(p => Path.GetFileName(p), p => p);
+
             List<string> options = new() { "Create Project" };
-            options.AddRange(_fileHandler.GetProjectFolders(_loggedInUser.UserName));
+            options.AddRange(projectMap.Keys);
 
             string choice = CreateDropDown(options, $"Projects - {_loggedInUser.UserName}", "[Up/Down] to navigate, [Enter] to select, [Esc] to exit");
 
@@ -128,49 +131,55 @@ public class UserInteractor
             }
             else
             {
-                ShowTaskMenu(_loggedInUser.UserName, choice);
+                ShowTaskMenu(_loggedInUser.UserName, projectMap[choice]); // Pass full path
             }
         }
     }
 
-    private void ShowTaskMenu(string username, string project)
+    private void ShowTaskMenu(string username, string projectPath)
     {
         while (true)
         {
-            List<string> options = new() { "Create Task" };
-            options.AddRange(_fileHandler.GetTaskFolders(username, project));
+            List<string> taskPaths = _fileHandler.GetTaskFolders(username, projectPath);
+            Dictionary<string, string> taskMap = taskPaths.ToDictionary(t => Path.GetFileName(t), t => t);
 
-            string choice = CreateDropDown(options, $"Tasks in {project}", "[Up/Down] to navigate, [Enter] to select, [Esc] to go back");
+            List<string> options = new() { "Create Task" };
+            options.AddRange(taskMap.Keys);
+
+            string choice = CreateDropDown(options, $"Tasks in {Path.GetFileName(projectPath)}", "[Up/Down] to navigate, [Enter] to select, [Esc] to go back");
 
             if (choice == null) return; // Back on ESC
             if (choice == "Create Task")
             {
-                CreateTask(username, project);
+                CreateTask(username, projectPath);
             }
             else
             {
-                ShowSubtaskMenu(username, project, choice);
+                ShowSubtaskMenu(username, projectPath, taskMap[choice]); // Pass full path
             }
         }
     }
 
-    private void ShowSubtaskMenu(string username, string project, string task)
+    private void ShowSubtaskMenu(string username, string projectPath, string taskPath)
     {
         while (true)
         {
-            List<string> options = new() { "Create Subtask" };
-            options.AddRange(_fileHandler.GetSubTaskFolders(username, project, task));
+            List<string> subtaskPaths = _fileHandler.GetSubTaskFolders(username, projectPath, taskPath);
+            Dictionary<string, string> subtaskMap = subtaskPaths.ToDictionary(st => Path.GetFileName(st), st => st);
 
-            string choice = CreateDropDown(options, $"Subtasks in {task}", "[Up/Down] to navigate, [Enter] to select, [Esc] to go back");
+            List<string> options = new() { "Create Subtask" };
+            options.AddRange(subtaskMap.Keys);
+
+            string choice = CreateDropDown(options, $"Subtasks in {Path.GetFileName(taskPath)}", "[Up/Down] to navigate, [Enter] to select, [Esc] to go back");
 
             if (choice == null) return; // Back on ESC
             if (choice == "Create Subtask")
             {
-                CreateSubtask(username, project, task);
+                CreateSubtask(username, projectPath, taskPath);
             }
             else
             {
-                ShowTimerMenu(username, project, task, choice);
+                ShowTimerMenu(username, projectPath, taskPath, subtaskMap[choice]); // Pass full path
             }
         }
     }
